@@ -1,0 +1,61 @@
+name: Deploy Orchestration (Full Stack)
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**'
+      - '!../AMEFA.Web/**'
+      - '!../AMEFAService.API/**'
+      - '!../AMEFAService.Gateway/**'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            cd ${{ secrets.VPS_DEPLOY_PATH || '/opt/amefa/AMEFA.Orchestration' }}
+            
+            # Actualizar archivos de orquestación
+            BRANCH_NAME="${{ github.ref_name }}"
+            git pull origin $BRANCH_NAME || true
+            
+            # Determinar si usar staging o production
+            if [ "$BRANCH_NAME" = "dev" ] || [ "$BRANCH_NAME" = "develop" ]; then
+              COMPOSE_FILES="-f docker-compose.yml -f docker-compose.staging.yml"
+              echo "🚀 Deploying to Staging environment"
+            else
+              COMPOSE_FILES="-f docker-compose.yml"
+              echo "🚀 Deploying to Production environment"
+            fi
+            
+            # Actualizar todas las imágenes
+            export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+            export DOCKER_REGISTRY=docker.io
+            export IMAGE_TAG=$BRANCH_NAME
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+            docker-compose $COMPOSE_FILES pull || true
+            
+            # Reconstruir y levantar todos los servicios
+            docker-compose $COMPOSE_FILES up -d --build
+            
+            # Esperar un momento para que los servicios inicien
+            sleep 10
+            
+            # Verificar estado
+            docker-compose $COMPOSE_FILES ps
+            
+            # Mostrar logs recientes
+            docker-compose $COMPOSE_FILES logs --tail=100

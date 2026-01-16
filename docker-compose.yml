@@ -1,0 +1,143 @@
+version: '3.8'
+
+services:
+  # SQL Server Database
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: amefa-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=${DB_SA_PASSWORD:-YourStrong@Password123}
+      - MSSQL_PID=Express
+    ports:
+      - "${DB_PORT:-1433}:1433"
+    volumes:
+      - sqlserver_data:/var/opt/mssql
+    networks:
+      - amefa-network
+    healthcheck:
+      test: /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P ${DB_SA_PASSWORD:-YourStrong@Password123} -Q "SELECT 1" || exit 1
+      interval: 10s
+      timeout: 3s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  # AMEFAService.API
+  api:
+    # Usa imagen del registry si está disponible, sino construye localmente
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_USERNAME:-}/amefa-api:${IMAGE_TAG:-latest}
+    build:
+      context: ../AMEFAService.API
+      dockerfile: Dockerfile
+    container_name: amefa-api
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Server=sqlserver,1433;Database=${DB_NAME:-AMEFADb};User Id=sa;Password=${DB_SA_PASSWORD:-YourStrong@Password123};MultipleActiveResultSets=true;TrustServerCertificate=true
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+      - Jwt__ExpiresInMinutes=${JWT_EXPIRES_IN_MINUTES:-1440}
+      - Stripe__SecretKey=${STRIPE_SECRET_KEY}
+      - Stripe__PublishableKey=${STRIPE_PUBLISHABLE_KEY}
+      - Stripe__WebhookSecret=${STRIPE_WEBHOOK_SECRET}
+      - Email__SmtpHost=${EMAIL_SMTP_HOST}
+      - Email__SmtpPort=${EMAIL_SMTP_PORT:-587}
+      - Email__SmtpUsername=${EMAIL_SMTP_USERNAME}
+      - Email__SmtpPassword=${EMAIL_SMTP_PASSWORD}
+      - Email__FromEmail=${EMAIL_FROM_EMAIL}
+      - Email__FromName=${EMAIL_FROM_NAME:-AMEFA}
+      - Email__BaseUrl=${EMAIL_BASE_URL}
+      - Email__SupportEmail=${EMAIL_SUPPORT_EMAIL}
+      - Email__SupportPhone=${EMAIL_SUPPORT_PHONE}
+      - Email__WebAppUrl=${EMAIL_WEBAPP_URL}
+      - Email__WebAppLabel=${EMAIL_WEBAPP_LABEL}
+      - MapService__Provider=${MAP_SERVICE_PROVIDER:-OpenStreetMap}
+      - MapService__GoogleMaps__ApiKey=${GOOGLE_MAPS_API_KEY:-}
+      - SuperAdmin__Email=${SUPERADMIN_EMAIL:-admin@amefa.com}
+      - SuperAdmin__Password=${SUPERADMIN_PASSWORD}
+      - SuperAdmin__FullName=${SUPERADMIN_FULLNAME:-Super Administrator}
+    ports:
+      - "${API_PORT:-8081}:8080"
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - amefa-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/swagger"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+
+  # AMEFAService.Gateway
+  gateway:
+    # Usa imagen del registry si está disponible, sino construye localmente
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_USERNAME:-}/amefa-gateway:${IMAGE_TAG:-latest}
+    build:
+      context: ../AMEFAService.Gateway
+      dockerfile: Dockerfile
+    container_name: amefa-gateway
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Production
+      - ASPNETCORE_URLS=http://+:8080
+      - DOTNET_RUNNING_IN_CONTAINER=true
+      - Jwt__Key=${JWT_KEY}
+      - Jwt__Issuer=${JWT_ISSUER}
+      - Jwt__Audience=${JWT_AUDIENCE}
+    ports:
+      - "${GATEWAY_PORT:-8080}:8080"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - amefa-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
+  # AMEFA.Web
+  web:
+    # Usa imagen del registry si está disponible, sino construye localmente
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_USERNAME:-}/amefa-web:${IMAGE_TAG:-latest}
+    build:
+      context: ../AMEFA.Web
+      dockerfile: Dockerfile
+      args:
+        # ⚠️ VITE_API_BASE_URL es REQUERIDO - debe estar configurado en el archivo .env
+        - VITE_API_BASE_URL=${VITE_API_BASE_URL}
+        # NODE_ENV debe ser 'production' para producción
+        - NODE_ENV=production
+    container_name: amefa-web
+    environment:
+      - NODE_ENV=production
+      - PORT=8080
+    ports:
+      - "${WEB_PORT:-3000}:8080"
+    depends_on:
+      gateway:
+        condition: service_healthy
+    networks:
+      - amefa-network
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+networks:
+  amefa-network:
+    driver: bridge
+
+volumes:
+  sqlserver_data:
+    driver: local

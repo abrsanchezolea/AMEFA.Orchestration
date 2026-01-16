@@ -1,0 +1,21 @@
+version: '3.8'
+
+# Versión de producción que usa imágenes del registry
+# Usa este archivo cuando las imágenes ya están construidas y subidas al registry
+# Ejemplo: docker-compose -f docker-compose.yml -f docker-compose.prod.yml up -d
+
+services:
+  # AMEFAService.API - Usa imagen del registry
+  api:
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_USERNAME}/amefa-api:latest
+    build: null  # Deshabilitar build local
+
+  # AMEFAService.Gateway - Usa imagen del registry
+  gateway:
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_USERNAME}/amefa-gateway:latest
+    build: null  # Deshabilitar build local
+
+  # AMEFA.Web - Usa imagen del registry
+  web:
+    image: ${DOCKER_REGISTRY:-docker.io}/${DOCKER_USERNAME}/amefa-web:latest
+    build: null  # Deshabilitar build local

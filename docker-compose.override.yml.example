@@ -1,0 +1,30 @@
+# Este archivo es un ejemplo de override para desarrollo local
+# Copia este archivo a docker-compose.override.yml y ajusta los valores según tu entorno
+# docker-compose.override.yml está en .gitignore y no se subirá al repositorio
+
+version: '3.8'
+
+services:
+  sqlserver:
+    ports:
+      - "1433:1433"
+    environment:
+      - SA_PASSWORD=YourStrong@Password123
+
+  api:
+    ports:
+      - "8081:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+
+  gateway:
+    ports:
+      - "8080:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+
+  web:
+    ports:
+      - "3000:8080"
+    environment:
+      - VITE_API_BASE_URL=http://localhost:8080/api
