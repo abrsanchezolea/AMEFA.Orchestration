@@ -26,11 +26,11 @@ GitHub está bloqueando el push porque detectó secretos en commits anteriores d
 
 3. **Eliminar secretos específicos del historial**:
    ```bash
-   # Eliminar Docker token
-   git filter-repo --replace-text <(echo 'dckr_pat_PEMyxCOKpH-BMi1oNEcLkSQttac==>dckr_pat_PLACEHOLDER')
+   # Eliminar Docker token (reemplaza con tu token real)
+   git filter-repo --replace-text <(echo 'dckr_pat_TU_TOKEN_AQUI==>dckr_pat_PLACEHOLDER')
    
-   # Eliminar Stripe keys
-   git filter-repo --replace-text <(echo 'sk_test_51SQut3PFLMaWWqfnxr0AFlb24kPEWoGks5kE5viCXzL0J8MAvZK9MUZth2TsUQXkwCsxx1RsLzdlxYnsIJunatsc00gy3X241t==>sk_test_PLACEHOLDER')
+   # Eliminar Stripe keys (reemplaza con tu clave real)
+   git filter-repo --replace-text <(echo 'sk_test_TU_CLAVE_AQUI==>sk_test_PLACEHOLDER')
    ```
 
 ### Opción 2: Force Push (Solo si es necesario)
@@ -77,7 +77,7 @@ Si no puedes reescribir el historial:
 
 1. **Docker Personal Access Token**:
    - Ve a: https://hub.docker.com/settings/security
-   - Revoca el token: `dckr_pat_PEMyxCOKpH-BMi1oNEcLkSQttac`
+   - Revoca el token expuesto (busca en el historial de tokens)
    - Genera uno nuevo
 
 2. **Stripe Test Keys**:

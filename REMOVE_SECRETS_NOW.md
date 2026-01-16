@@ -53,9 +53,9 @@ Si los secretos están en archivos de ejemplo/documentación y no son críticos:
 # Instalar git-filter-repo
 pip install git-filter-repo
 
-# Eliminar secretos del historial
-git filter-repo --replace-text <(echo 'dckr_pat_PEMyxCOKpH-BMi1oNEcLkSQttac==>dckr_pat_PLACEHOLDER')
-git filter-repo --replace-text <(echo 'sk_test_51SQut3PFLMaWWqfnxr0AFlb24kPEWoGks5kE5viCXzL0J8MAvZK9MUZth2TsUQXkwCsxx1RsLzdlxYnsIJunatsc00gy3X241t==>sk_test_PLACEHOLDER')
+# Eliminar secretos del historial (reemplaza con tus secretos reales)
+git filter-repo --replace-text <(echo 'dckr_pat_TU_TOKEN_AQUI==>dckr_pat_PLACEHOLDER')
+git filter-repo --replace-text <(echo 'sk_test_TU_CLAVE_AQUI==>sk_test_PLACEHOLDER')
 
 # Force push (CUIDADO)
 git push origin main --force
@@ -67,7 +67,7 @@ git push origin main --force
 
 1. **Docker Personal Access Token**:
    - Ve a: https://hub.docker.com/settings/security
-   - Revoca: `dckr_pat_PEMyxCOKpH-BMi1oNEcLkSQttac`
+   - Revoca el token expuesto (busca en el historial de tokens)
    - Genera uno nuevo
 
 2. **Stripe Test Keys**:
