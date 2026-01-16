@@ -12,7 +12,6 @@ on:
 env:
   IMAGE_NAME: amefa-gateway
   REGISTRY: docker.io
-  # Usa tu usuario de Docker Hub o ghcr.io para GitHub Container Registry
 
 jobs:
   build-and-push:
@@ -20,6 +19,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+
+    # Determinar el environment basado en el branch
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 
     steps:
       - name: Checkout code
@@ -63,18 +65,121 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             cd ${{ secrets.VPS_DEPLOY_PATH || '/opt/amefa/AMEFA.Orchestration' }}
-            export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
-            export DOCKER_REGISTRY=docker.io
-            export IMAGE_TAG=${{ github.ref_name }}
+            
             # Determinar si usar staging o production
             BRANCH_NAME="${{ github.ref_name }}"
             if [ "$BRANCH_NAME" = "dev" ] || [ "$BRANCH_NAME" = "develop" ]; then
               COMPOSE_FILES="-f docker-compose.yml -f docker-compose.staging.yml"
+              ENV_TYPE="staging"
               echo "🚀 Deploying to Staging environment"
             else
               COMPOSE_FILES="-f docker-compose.yml"
+              ENV_TYPE="production"
               echo "🚀 Deploying to Production environment"
             fi
+            
+            # Generar archivo .env desde GitHub Secrets (si no existe)
+            if [ ! -f .env ]; then
+              echo "🔧 Generando archivo .env para entorno $ENV_TYPE..."
+              cat > .env << EOF
+            # Archivo .env generado automáticamente desde GitHub Secrets
+            # Entorno: $ENV_TYPE
+            # Generado: $(date)
+            
+            # Database Configuration
+            EOF
+              if [ "$ENV_TYPE" = "staging" ]; then
+                echo "STAGING_DB_CONNECTION_STRING=${{ secrets.STAGING_DB_CONNECTION_STRING }}" >> .env
+              else
+                echo "DB_SA_PASSWORD=${{ secrets.DB_SA_PASSWORD }}" >> .env
+                echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+                echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
+              fi
+              cat >> .env << EOF
+            
+            # API Configuration
+            API_PORT=8081
+            
+            # Gateway Configuration
+            GATEWAY_PORT=8080
+            
+            # Web Configuration
+            WEB_PORT=3000
+            EOF
+              # VITE_API_BASE_URL viene del environment secret
+              echo "VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}" >> .env
+              cat >> .env << EOF
+            
+            # JWT Configuration
+            JWT_KEY=${{ secrets.JWT_KEY }}
+            JWT_ISSUER=${{ secrets.JWT_ISSUER }}
+            JWT_AUDIENCE=${{ secrets.JWT_AUDIENCE }}
+            EOF
+              if [ "$ENV_TYPE" = "staging" ]; then
+                echo "JWT_EXPIRES_IN_MINUTES=${{ secrets.JWT_EXPIRES_IN_MINUTES || '120' }}" >> .env
+              else
+                echo "JWT_EXPIRES_IN_MINUTES=${{ secrets.JWT_EXPIRES_IN_MINUTES || '1440' }}" >> .env
+              fi
+              cat >> .env << EOF
+            
+            # Stripe Configuration
+            STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
+            STRIPE_PUBLISHABLE_KEY=${{ secrets.STRIPE_PUBLISHABLE_KEY }}
+            STRIPE_WEBHOOK_SECRET=${{ secrets.STRIPE_WEBHOOK_SECRET }}
+            
+            # Email Configuration
+            EMAIL_BASE_URL=${{ secrets.EMAIL_BASE_URL }}
+            EMAIL_SMTP_HOST=${{ secrets.EMAIL_SMTP_HOST || 'smtp.gmail.com' }}
+            EMAIL_SMTP_PORT=${{ secrets.EMAIL_SMTP_PORT || '587' }}
+            EMAIL_SMTP_USERNAME=${{ secrets.EMAIL_SMTP_USERNAME }}
+            EMAIL_SMTP_PASSWORD=${{ secrets.EMAIL_SMTP_PASSWORD }}
+            EMAIL_FROM_EMAIL=${{ secrets.EMAIL_FROM_EMAIL }}
+            EMAIL_FROM_NAME=${{ secrets.EMAIL_FROM_NAME || 'AMEFA' }}
+            EMAIL_SUPPORT_EMAIL=${{ secrets.EMAIL_SUPPORT_EMAIL }}
+            EMAIL_SUPPORT_PHONE=${{ secrets.EMAIL_SUPPORT_PHONE }}
+            EMAIL_WEBAPP_URL=${{ secrets.EMAIL_WEBAPP_URL }}
+            EMAIL_WEBAPP_LABEL=${{ secrets.EMAIL_WEBAPP_LABEL || 'https://www.miamefa.com' }}
+            
+            # Map Service Configuration
+            MAP_SERVICE_PROVIDER=OpenStreetMap
+            GOOGLE_MAPS_API_KEY=${{ secrets.GOOGLE_MAPS_API_KEY || '' }}
+            
+            # SuperAdmin Configuration
+            SUPERADMIN_EMAIL=${{ secrets.SUPERADMIN_EMAIL || 'admin@amefa.com' }}
+            SUPERADMIN_PASSWORD=${{ secrets.SUPERADMIN_PASSWORD }}
+            SUPERADMIN_FULLNAME=${{ secrets.SUPERADMIN_FULLNAME || 'Super Administrator' }}
+            
+            # Cache Configuration
+            EOF
+              if [ "$ENV_TYPE" = "staging" ]; then
+                cat >> .env << EOF
+            CACHE_PHARMACIES_ABSOLUTE=15
+            CACHE_PHARMACIES_SLIDING=5
+            EOF
+              else
+                cat >> .env << EOF
+            CACHE_PHARMACIES_ABSOLUTE=60
+            CACHE_PHARMACIES_SLIDING=10
+            EOF
+              fi
+              cat >> .env << EOF
+            CACHE_PHARMACIES_ENABLED=true
+            CACHE_USERS_ABSOLUTE=15
+            CACHE_USERS_SLIDING=5
+            CACHE_USERS_ENABLED=true
+            CACHE_SIZE_LIMIT=1024
+            
+            # Docker Registry Configuration
+            DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
+            DOCKER_REGISTRY=docker.io
+            IMAGE_TAG=${{ github.ref_name }}
+            EOF
+              chmod 600 .env
+              echo "✅ Archivo .env generado y protegido"
+            else
+              echo "ℹ️ Archivo .env ya existe, usando configuración existente"
+            fi
+            
             # Login a Docker Hub en el VPS
             echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
             # Actualizar imagen

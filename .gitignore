@@ -4,6 +4,10 @@
 .env.*.local
 docker-compose.override.yml
 
+# Secrets files (NO subir archivos con secrets reales)
+secrets-*.json
+!secrets-*.json.example
+
 # Logs
 *.log
 logs/
