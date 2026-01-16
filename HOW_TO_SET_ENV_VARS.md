@@ -58,9 +58,10 @@ Edita el archivo `.env` y reemplaza los placeholders con valores reales:
 
 ```env
 # Stripe Configuration
-STRIPE_SECRET_KEY=sk_test_51SQut3PFLMaWWqfnxr0AFlb24kPEWoGks5kE5viCXzL0J8MAvZK9MUZth2TsUQXkwCsxx1RsLzdlxYnsIJunatsc00gy3X241t
-STRIPE_PUBLISHABLE_KEY=pk_test_51SQut3PFLMaWWqfnMe5x7r1C6PJfA3oUPxdHp1VWWGHFJ3LnBW9dgD0KQtBtXv1qfx0hLRr8D0TXe2PAiEGjgHo7006ciMiPIt
-STRIPE_WEBHOOK_SECRET=whsec_sIrvX5oFpnHei75RdB4IrekTPh1bV9yx
+# ⚠️ Reemplaza con tus claves reales de Stripe
+STRIPE_SECRET_KEY=sk_test_tu_clave_secreta_de_stripe_aqui
+STRIPE_PUBLISHABLE_KEY=pk_test_tu_clave_publica_de_stripe_aqui
+STRIPE_WEBHOOK_SECRET=whsec_tu_webhook_secret_de_stripe_aqui
 
 # Email Configuration
 EMAIL_SMTP_PASSWORD=qsutkluclhwyywzm

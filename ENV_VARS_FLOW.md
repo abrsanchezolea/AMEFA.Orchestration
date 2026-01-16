@@ -87,7 +87,7 @@ cp env.staging.example .env
 # 2. Editar con valores reales
 nano .env
 # Cambiar: sk_test_your_stripe_secret_key_here
-# Por:     sk_test_51SQut3PFLMaWWqfnxr0AFlb24kPEWoGks5kE5viCXzL0J8MAvZK9MUZth2TsUQXkwCsxx1RsLzdlxYnsIJunatsc00gy3X241t
+# Por:     tu-clave-secreta-de-stripe-real
 
 # 3. Verificar que .env está protegido
 ls -la .env
