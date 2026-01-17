@@ -98,11 +98,28 @@ jobs:
             exit 1
           fi
 
+      - name: Verify Dockerfile exists
+        run: |
+          echo "📁 Current directory: $(pwd)"
+          echo "📁 Contents of AMEFA.Web:"
+          ls -la ./AMEFA.Web/ || echo "❌ AMEFA.Web directory not found"
+          echo ""
+          echo "🔍 Looking for Dockerfile:"
+          if [ -f "./AMEFA.Web/Dockerfile" ]; then
+            echo "✅ Dockerfile found at ./AMEFA.Web/Dockerfile"
+            head -5 ./AMEFA.Web/Dockerfile
+          else
+            echo "❌ Dockerfile NOT found at ./AMEFA.Web/Dockerfile"
+            echo "📋 Files in AMEFA.Web:"
+            find ./AMEFA.Web -name "Dockerfile*" -o -name "dockerfile*" || echo "No Dockerfile found"
+            exit 1
+          fi
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: ./AMEFA.Web
-          file: Dockerfile          
+          file: ./AMEFA.Web/Dockerfile          
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
