@@ -136,9 +136,11 @@ jobs:
             # Clonar o actualizar AMEFA.Orchestration
             if [ -d "$DEPLOY_PATH/.git" ]; then
               cd "$DEPLOY_PATH"
+              # Descartar cambios locales para evitar conflictos
               git fetch origin
+              git reset --hard origin/$BRANCH_NAME || git reset --hard HEAD
+              git clean -fd
               git checkout $BRANCH_NAME || git checkout -b $BRANCH_NAME origin/$BRANCH_NAME
-              git pull origin $BRANCH_NAME || true
             else
               echo "📦 Clonando AMEFA.Orchestration..."
               rm -rf "$DEPLOY_PATH"
