@@ -9,8 +9,7 @@ services:
   # AMEFAService.API - Configuración Staging
   api:
     # En staging, la base de datos es externa, así que no depende del servicio sqlserver local
-    # Sobrescribir depends_on para eliminar la dependencia de sqlserver
-    # No hay dependencias en staging ya que usa base de datos externa
+    # Sobrescribir depends_on con una lista vacía para eliminar la dependencia de sqlserver
     depends_on: []
     environment:
       - ASPNETCORE_ENVIRONMENT=Staging
@@ -50,6 +49,11 @@ services:
 
   # AMEFAService.Gateway - Configuración Staging
   gateway:
+    # En staging, el gateway puede iniciar sin esperar a que api esté healthy
+    # porque ambos servicios pueden iniciar en paralelo
+    depends_on:
+      api:
+        condition: service_started
     environment:
       - ASPNETCORE_ENVIRONMENT=Staging
       - DOTNET_RUNNING_IN_CONTAINER=true

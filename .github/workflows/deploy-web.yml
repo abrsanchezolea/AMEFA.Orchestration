@@ -178,35 +178,8 @@ jobs:
               cd "$DEPLOY_PATH"
             fi
             
-            # Actualizar repositorios dependientes
-            cd "$BASE_PATH"
-            
-            # Actualizar AMEFA.Web
-            if [ -d "AMEFA.Web/.git" ]; then
-              cd AMEFA.Web
-              git fetch origin
-              if [ "$BRANCH_NAME" = "main" ]; then
-                WEB_BRANCH="main"
-              elif [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
-                WEB_BRANCH="dev"
-              else
-                WEB_BRANCH="$BRANCH_NAME"
-              fi
-              git checkout $WEB_BRANCH || git checkout -b $WEB_BRANCH origin/$WEB_BRANCH
-              git pull origin $WEB_BRANCH || true
-              cd "$BASE_PATH"
-            else
-              if [ "$BRANCH_NAME" = "main" ]; then
-                WEB_BRANCH="main"
-              elif [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
-                WEB_BRANCH="dev"
-              else
-                WEB_BRANCH="$BRANCH_NAME"
-              fi
-              echo "📦 Clonando AMEFA.Web (branch: $WEB_BRANCH)..."
-              git clone -b $WEB_BRANCH https://github.com/abrsanchezolea/AMEFA.Web.git AMEFA.Web || true
-            fi
-            
+            # Los proyectos se obtienen desde las imágenes de Docker Hub
+            # No es necesario clonar los repositorios
             cd "$DEPLOY_PATH"
             
             # Determinar si usar staging o production
