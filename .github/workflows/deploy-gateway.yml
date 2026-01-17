@@ -1,4 +1,5 @@
 name: Deploy AMEFAService.Gateway
+# Updated: Configured for dev branch staging deployments
 
 on:
   # Se activa manualmente o cuando hay cambios en este repositorio
