@@ -4,6 +4,8 @@ on:
   push:
     branches:
       - main
+      - dev
+      - develop
     paths:
       - '**'
       - '!../AMEFA.Web/**'
@@ -168,7 +170,7 @@ jobs:
             # Docker Registry Configuration
             DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
             DOCKER_REGISTRY=docker.io
-            IMAGE_TAG=${{ github.ref_name }}
+            IMAGE_TAG=$BRANCH_NAME
             EOF
             
             # Proteger el archivo .env
@@ -183,17 +185,13 @@ jobs:
             # Login a Docker Hub
             echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
             
-            # Intentar hacer pull de las imágenes (fallará silenciosamente si no existen)
-            echo "📥 Intentando descargar imágenes del registry..."
-            docker-compose $COMPOSE_FILES pull 2>&1 | grep -v "not found" || echo "⚠️  Algunas imágenes no existen en el registry, se construirán localmente"
+            # Hacer pull de las imágenes desde Docker Hub
+            echo "📥 Descargando imágenes del registry..."
+            docker-compose $COMPOSE_FILES pull || echo "⚠️  Algunas imágenes no existen en el registry"
             
-            # Construir las imágenes localmente (docker-compose construirá solo las que no se pudieron descargar)
-            echo "🔨 Construyendo imágenes..."
-            docker-compose $COMPOSE_FILES build
-            
-            # Levantar los servicios
+            # Levantar los servicios (usará las imágenes descargadas o construirá si es necesario)
             echo "🚀 Iniciando servicios..."
-            docker-compose $COMPOSE_FILES up -d
+            docker-compose $COMPOSE_FILES up -d --remove-orphans
             
             # Esperar un momento para que los servicios inicien
             sleep 10
