@@ -80,3 +80,8 @@ services:
     environment:
       - NODE_ENV=staging
       - PORT=8080
+    # En staging, el web puede iniciar aunque el gateway esté unhealthy
+    # Cambiar la dependencia de service_healthy a service_started
+    depends_on:
+      gateway:
+        condition: service_started
