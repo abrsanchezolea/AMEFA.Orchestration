@@ -2,6 +2,10 @@
 # Usa: docker-compose -f docker-compose.yml -f docker-compose.staging.yml up -d
 
 services:
+  # Deshabilitar SQL Server en staging (se usa base de datos externa)
+  sqlserver:
+    profiles:
+      - never
   # AMEFAService.API - Configuración Staging
   api:
     # En staging, la base de datos es externa, así que no depende del servicio sqlserver local

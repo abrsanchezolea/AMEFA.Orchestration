@@ -49,35 +49,9 @@ jobs:
               cd "$DEPLOY_PATH"
             fi
             
-            # Clonar o actualizar los otros proyectos si no existen
-            cd "$BASE_PATH"
-            
-            if [ ! -d "AMEFAService.API" ]; then
-              echo "📦 Clonando AMEFAService.API..."
-              git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFAService.API.git AMEFAService.API || true
-            else
-              cd AMEFAService.API
-              git pull origin $BRANCH_NAME || true
-              cd "$BASE_PATH"
-            fi
-            
-            if [ ! -d "AMEFAService.Gateway" ]; then
-              echo "📦 Clonando AMEFAService.Gateway..."
-              git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFAService.Gateway.git AMEFAService.Gateway || true
-            else
-              cd AMEFAService.Gateway
-              git pull origin $BRANCH_NAME || true
-              cd "$BASE_PATH"
-            fi
-            
-            if [ ! -d "AMEFA.Web" ]; then
-              echo "📦 Clonando AMEFA.Web..."
-              git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFA.Web.git AMEFA.Web || true
-            else
-              cd AMEFA.Web
-              git pull origin $BRANCH_NAME || true
-              cd "$BASE_PATH"
-            fi
+            # Los proyectos se construyen desde las imágenes de Docker Hub
+            # No es necesario clonar los repositorios ya que las imágenes ya están construidas
+            echo "ℹ️  Los proyectos se obtendrán desde las imágenes de Docker Hub"
             
             # Volver al directorio de orquestación
             cd "$DEPLOY_PATH"
@@ -103,6 +77,10 @@ jobs:
             # Database Configuration
             EOF
             if [ "$ENV_TYPE" = "staging" ]; then
+              if [ -z "${{ secrets.STAGING_DB_CONNECTION_STRING }}" ]; then
+                echo "❌ ERROR: STAGING_DB_CONNECTION_STRING no está configurado en GitHub Secrets" >&2
+                exit 1
+              fi
               echo "STAGING_DB_CONNECTION_STRING=${{ secrets.STAGING_DB_CONNECTION_STRING }}" >> .env
             else
               echo "DB_SA_PASSWORD=${{ secrets.DB_SA_PASSWORD }}" >> .env
