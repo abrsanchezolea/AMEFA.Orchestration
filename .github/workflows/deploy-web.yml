@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - develop
+      - dev
     paths:
       - '.github/workflows/deploy-web.yml'
       - 'docker-compose.yml'
@@ -29,7 +30,8 @@ jobs:
       packages: write
 
     # Determinar el environment basado en el branch
-    environment: ${{ github.event_name == 'repository_dispatch' && 'staging' || (github.ref_name == 'main' && 'production' || 'staging') }}
+    # main → production, dev/develop → staging
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 
     steps:
       - name: Determine branch
@@ -40,14 +42,24 @@ jobs:
           else
             BRANCH="${{ github.ref_name }}"
           fi
+          # Mapear ramas según la rama de AMEFA.Orchestration:
+          # main -> main (production), dev/develop -> dev (staging)
+          if [ "$BRANCH" = "main" ]; then
+            WEB_BRANCH="main"
+          elif [ "$BRANCH" = "develop" ] || [ "$BRANCH" = "dev" ]; then
+            WEB_BRANCH="dev"
+          else
+            WEB_BRANCH="$BRANCH"
+          fi
           echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
-          echo "✅ Using branch: ${BRANCH}"
+          echo "web_branch=${WEB_BRANCH}" >> $GITHUB_OUTPUT
+          echo "✅ Using branch: ${BRANCH} -> AMEFA.Web branch: ${WEB_BRANCH}"
       
       - name: Checkout AMEFA.Web
         uses: actions/checkout@v4
         with:
           repository: abrsanchezolea/AMEFA.Web
-          ref: ${{ steps.branch.outputs.branch }}
+          ref: ${{ steps.branch.outputs.web_branch }}
           path: AMEFA.Web
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
 

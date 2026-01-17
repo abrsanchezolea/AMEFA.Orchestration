@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - develop
+      - dev
     paths:
       - '.github/workflows/deploy-api.yml'
       - 'docker-compose.yml'
@@ -29,10 +30,8 @@ jobs:
       packages: write
 
     # Determinar el environment basado en el branch
-    # Branch 'main' → environment 'production'
-    # Branch 'dev' o 'develop' → environment 'staging'
-    # Nota: Para repository_dispatch, se determinará en el step
-    environment: ${{ github.event_name == 'repository_dispatch' && 'staging' || (github.ref_name == 'main' && 'production' || 'staging') }}
+    # main → production, dev/develop → staging
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 
     steps:
       - name: Determine branch
@@ -43,16 +42,43 @@ jobs:
           else
             BRANCH="${{ github.ref_name }}"
           fi
+          # Mapear ramas: main -> main, develop/dev -> dev
+          # Si el Dockerfile no está en main, usar dev como fallback
+          if [ "$BRANCH" = "main" ]; then
+            API_BRANCH="main"
+          elif [ "$BRANCH" = "develop" ] || [ "$BRANCH" = "dev" ]; then
+            API_BRANCH="dev"
+          else
+            API_BRANCH="$BRANCH"
+          fi
           echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
-          echo "✅ Using branch: ${BRANCH}"
+          echo "api_branch=${API_BRANCH}" >> $GITHUB_OUTPUT
+          echo "✅ Using branch: ${BRANCH} -> AMEFAService.API branch: ${API_BRANCH}"
       
       - name: Checkout AMEFAService.API
         uses: actions/checkout@v4
         with:
           repository: abrsanchezolea/AMEFAService.API
-          ref: ${{ steps.branch.outputs.branch }}
+          ref: ${{ steps.branch.outputs.api_branch }}
           path: AMEFAService.API
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
+
+      - name: Verify Dockerfile exists
+        run: |
+          echo "📁 Current directory: $(pwd)"
+          echo "📁 Contents of AMEFAService.API:"
+          ls -la ./AMEFAService.API/ || echo "❌ AMEFAService.API directory not found"
+          echo ""
+          echo "🔍 Looking for Dockerfile:"
+          if [ -f "./AMEFAService.API/Dockerfile" ]; then
+            echo "✅ Dockerfile found at ./AMEFAService.API/Dockerfile"
+            head -5 ./AMEFAService.API/Dockerfile
+          else
+            echo "❌ Dockerfile NOT found at ./AMEFAService.API/Dockerfile"
+            echo "📋 Files in AMEFAService.API:"
+            find ./AMEFAService.API -name "Dockerfile*" -o -name "dockerfile*" || echo "No Dockerfile found"
+            exit 1
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3

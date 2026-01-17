@@ -6,6 +6,7 @@ on:
     branches:
       - main
       - develop
+      - dev
     paths:
       - '.github/workflows/deploy-gateway.yml'
       - 'docker-compose.yml'
@@ -28,7 +29,8 @@ jobs:
       packages: write
 
     # Determinar el environment basado en el branch
-    environment: ${{ github.event_name == 'repository_dispatch' && 'staging' || (github.ref_name == 'main' && 'production' || 'staging') }}
+    # main → production, dev/develop → staging
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 
     steps:
       - name: Determine branch
@@ -39,16 +41,43 @@ jobs:
           else
             BRANCH="${{ github.ref_name }}"
           fi
+          # Mapear ramas: main -> main, develop/dev -> dev
+          # Gateway tiene Dockerfile en ambas ramas, pero mapeamos para consistencia
+          if [ "$BRANCH" = "main" ]; then
+            GATEWAY_BRANCH="main"
+          elif [ "$BRANCH" = "develop" ] || [ "$BRANCH" = "dev" ]; then
+            GATEWAY_BRANCH="dev"
+          else
+            GATEWAY_BRANCH="$BRANCH"
+          fi
           echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
-          echo "✅ Using branch: ${BRANCH}"
+          echo "gateway_branch=${GATEWAY_BRANCH}" >> $GITHUB_OUTPUT
+          echo "✅ Using branch: ${BRANCH} -> AMEFAService.Gateway branch: ${GATEWAY_BRANCH}"
       
       - name: Checkout AMEFAService.Gateway
         uses: actions/checkout@v4
         with:
           repository: abrsanchezolea/AMEFAService.Gateway
-          ref: ${{ steps.branch.outputs.branch }}
+          ref: ${{ steps.branch.outputs.gateway_branch }}
           path: AMEFAService.Gateway
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
+
+      - name: Verify Dockerfile exists
+        run: |
+          echo "📁 Current directory: $(pwd)"
+          echo "📁 Contents of AMEFAService.Gateway:"
+          ls -la ./AMEFAService.Gateway/ || echo "❌ AMEFAService.Gateway directory not found"
+          echo ""
+          echo "🔍 Looking for Dockerfile:"
+          if [ -f "./AMEFAService.Gateway/Dockerfile" ]; then
+            echo "✅ Dockerfile found at ./AMEFAService.Gateway/Dockerfile"
+            head -5 ./AMEFAService.Gateway/Dockerfile
+          else
+            echo "❌ Dockerfile NOT found at ./AMEFAService.Gateway/Dockerfile"
+            echo "📋 Files in AMEFAService.Gateway:"
+            find ./AMEFAService.Gateway -name "Dockerfile*" -o -name "dockerfile*" || echo "No Dockerfile found"
+            exit 1
+          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
