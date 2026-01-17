@@ -30,11 +30,57 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           script: |
-            cd ${{ secrets.VPS_DEPLOY_PATH || '/opt/amefa/AMEFA.Orchestration' }}
-            
-            # Actualizar archivos de orquestación
+            DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH || '/opt/amefa/AMEFA.Orchestration' }}"
+            BASE_PATH="$(dirname "$DEPLOY_PATH")"
             BRANCH_NAME="${{ github.ref_name }}"
-            git pull origin $BRANCH_NAME || true
+            
+            # Asegurar que el directorio base existe
+            mkdir -p "$BASE_PATH"
+            cd "$BASE_PATH"
+            
+            # Clonar o actualizar AMEFA.Orchestration
+            if [ -d "$DEPLOY_PATH/.git" ]; then
+              cd "$DEPLOY_PATH"
+              git pull origin $BRANCH_NAME || true
+            else
+              echo "📦 Clonando AMEFA.Orchestration..."
+              rm -rf "$DEPLOY_PATH"
+              git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFA.Orchestration.git "$DEPLOY_PATH" || true
+              cd "$DEPLOY_PATH"
+            fi
+            
+            # Clonar o actualizar los otros proyectos si no existen
+            cd "$BASE_PATH"
+            
+            if [ ! -d "AMEFAService.API" ]; then
+              echo "📦 Clonando AMEFAService.API..."
+              git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFAService.API.git AMEFAService.API || true
+            else
+              cd AMEFAService.API
+              git pull origin $BRANCH_NAME || true
+              cd "$BASE_PATH"
+            fi
+            
+            if [ ! -d "AMEFAService.Gateway" ]; then
+              echo "📦 Clonando AMEFAService.Gateway..."
+              git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFAService.Gateway.git AMEFAService.Gateway || true
+            else
+              cd AMEFAService.Gateway
+              git pull origin $BRANCH_NAME || true
+              cd "$BASE_PATH"
+            fi
+            
+            if [ ! -d "AMEFA.Web" ]; then
+              echo "📦 Clonando AMEFA.Web..."
+              git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFA.Web.git AMEFA.Web || true
+            else
+              cd AMEFA.Web
+              git pull origin $BRANCH_NAME || true
+              cd "$BASE_PATH"
+            fi
+            
+            # Volver al directorio de orquestación
+            cd "$DEPLOY_PATH"
             
             # Determinar si usar staging o production
             if [ "$BRANCH_NAME" = "dev" ] || [ "$BRANCH_NAME" = "develop" ]; then
@@ -147,15 +193,25 @@ jobs:
             chmod 600 .env
             echo "✅ Archivo .env generado y protegido"
             
-            # Actualizar todas las imágenes
+            # Configurar variables de Docker
             export DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
             export DOCKER_REGISTRY=docker.io
             export IMAGE_TAG=$BRANCH_NAME
-            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
-            docker-compose $COMPOSE_FILES pull || true
             
-            # Reconstruir y levantar todos los servicios
-            docker-compose $COMPOSE_FILES up -d --build
+            # Login a Docker Hub
+            echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
+            
+            # Intentar hacer pull de las imágenes (fallará silenciosamente si no existen)
+            echo "📥 Intentando descargar imágenes del registry..."
+            docker-compose $COMPOSE_FILES pull 2>&1 | grep -v "not found" || echo "⚠️  Algunas imágenes no existen en el registry, se construirán localmente"
+            
+            # Construir las imágenes localmente (docker-compose construirá solo las que no se pudieron descargar)
+            echo "🔨 Construyendo imágenes..."
+            docker-compose $COMPOSE_FILES build
+            
+            # Levantar los servicios
+            echo "🚀 Iniciando servicios..."
+            docker-compose $COMPOSE_FILES up -d
             
             # Esperar un momento para que los servicios inicien
             sleep 10
