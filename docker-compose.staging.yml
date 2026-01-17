@@ -12,14 +12,10 @@ services:
   # AMEFAService.API - Configuración Staging
   api:
     # En staging, la base de datos es externa, así que no depende del servicio sqlserver local
-    # Docker Compose fusiona depends_on cuando se combinan archivos, pero podemos sobrescribir
-    # completamente usando una lista vacía. Sin embargo, Docker Compose valida dependencias
-    # antes de aplicar profiles, así que sqlserver debe estar definido (está en docker-compose.yml).
-    # Agregamos profiles: - never a sqlserver para que no se inicie, pero Docker Compose
-    # todavía lo valida como dependencia. La solución es no tener depends_on en staging.
-    # Nota: Esto crea una dependencia circular si api depende de gateway y gateway depende de api.
-    # La solución es que api no tenga depends_on en staging (se iniciará sin esperar nada).
-    depends_on: []
+    # Docker Compose fusiona depends_on cuando se combinan archivos (concatena en lugar de sobrescribir).
+    # Para eliminar completamente la dependencia de sqlserver, usamos !reset para reiniciar la lista.
+    # sqlserver está definido en docker-compose.yml con profiles: - never, así que no se iniciará.
+    depends_on: !reset []
     environment:
       - ASPNETCORE_ENVIRONMENT=Staging
       # En staging, la base de datos es externa (db33665.databaseasp.net)
