@@ -1,5 +1,4 @@
-name: Deploy AMEFAService.Gateway
-# Updated: Configured for dev branch staging deployments
+name: Deploy AMEFAService.API
 
 on:
   # Se activa manualmente o cuando hay cambios en este repositorio
@@ -9,18 +8,19 @@ on:
       - develop
       - dev
     paths:
-      - '.github/workflows/deploy-gateway.yml'
+      - '.github/workflows/deploy-api.yml'
       - 'docker-compose.yml'
       - 'docker-compose.staging.yml'
   # Se puede activar desde otros repositorios usando repository_dispatch
   repository_dispatch:
-    types: [deploy-gateway]
+    types: [deploy-api]
   # Activación manual
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: amefa-gateway
+  IMAGE_NAME: amefa-api
   REGISTRY: docker.io
+  # Usa tu usuario de Docker Hub o ghcr.io para GitHub Container Registry
 
 jobs:
   build-and-push:
@@ -31,8 +31,7 @@ jobs:
 
     # Determinar el environment basado en el branch
     # main → production, dev/develop → staging
-    # Cuando viene de repository_dispatch, usar el branch del payload
-    environment: ${{ github.event_name == 'repository_dispatch' && (github.event.client_payload.branch == 'main' && 'production' || 'staging') || (github.ref_name == 'main' && 'production' || 'staging') }}
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 
     steps:
       - name: Determine branch
@@ -44,40 +43,40 @@ jobs:
             BRANCH="${{ github.ref_name }}"
           fi
           # Mapear ramas: main -> main, develop/dev -> dev
-          # Gateway tiene Dockerfile en ambas ramas, pero mapeamos para consistencia
+          # Si el Dockerfile no está en main, usar dev como fallback
           if [ "$BRANCH" = "main" ]; then
-            GATEWAY_BRANCH="main"
+            API_BRANCH="main"
           elif [ "$BRANCH" = "develop" ] || [ "$BRANCH" = "dev" ]; then
-            GATEWAY_BRANCH="dev"
+            API_BRANCH="dev"
           else
-            GATEWAY_BRANCH="$BRANCH"
+            API_BRANCH="$BRANCH"
           fi
           echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
-          echo "gateway_branch=${GATEWAY_BRANCH}" >> $GITHUB_OUTPUT
-          echo "✅ Using branch: ${BRANCH} -> AMEFAService.Gateway branch: ${GATEWAY_BRANCH}"
+          echo "api_branch=${API_BRANCH}" >> $GITHUB_OUTPUT
+          echo "✅ Using branch: ${BRANCH} -> AMEFAService.API branch: ${API_BRANCH}"
       
-      - name: Checkout AMEFAService.Gateway
+      - name: Checkout AMEFAService.API
         uses: actions/checkout@v4
         with:
-          repository: abrsanchezolea/AMEFAService.Gateway
-          ref: ${{ steps.branch.outputs.gateway_branch }}
-          path: AMEFAService.Gateway
+          repository: abrsanchezolea/AMEFAService.API
+          ref: ${{ steps.branch.outputs.api_branch }}
+          path: AMEFAService.API
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
 
       - name: Verify Dockerfile exists
         run: |
           echo "📁 Current directory: $(pwd)"
-          echo "📁 Contents of AMEFAService.Gateway:"
-          ls -la ./AMEFAService.Gateway/ || echo "❌ AMEFAService.Gateway directory not found"
+          echo "📁 Contents of AMEFAService.API:"
+          ls -la ./AMEFAService.API/ || echo "❌ AMEFAService.API directory not found"
           echo ""
           echo "🔍 Looking for Dockerfile:"
-          if [ -f "./AMEFAService.Gateway/Dockerfile" ]; then
-            echo "✅ Dockerfile found at ./AMEFAService.Gateway/Dockerfile"
-            head -5 ./AMEFAService.Gateway/Dockerfile
+          if [ -f "./AMEFAService.API/Dockerfile" ]; then
+            echo "✅ Dockerfile found at ./AMEFAService.API/Dockerfile"
+            head -5 ./AMEFAService.API/Dockerfile
           else
-            echo "❌ Dockerfile NOT found at ./AMEFAService.Gateway/Dockerfile"
-            echo "📋 Files in AMEFAService.Gateway:"
-            find ./AMEFAService.Gateway -name "Dockerfile*" -o -name "dockerfile*" || echo "No Dockerfile found"
+            echo "❌ Dockerfile NOT found at ./AMEFAService.API/Dockerfile"
+            echo "📋 Files in AMEFAService.API:"
+            find ./AMEFAService.API -name "Dockerfile*" -o -name "dockerfile*" || echo "No Dockerfile found"
             exit 1
           fi
 
@@ -103,8 +102,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./AMEFAService.Gateway
-          file: ./AMEFAService.Gateway/Dockerfile
+          context: ./AMEFAService.API
+          file: ./AMEFAService.API/Dockerfile
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
@@ -121,63 +120,28 @@ jobs:
           script: |
             DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH || '/opt/amefa/AMEFA.Orchestration' }}"
             BASE_PATH="$(dirname "$DEPLOY_PATH")"
-            
-            # Determinar branch del evento o del payload ANTES de clonar
-            if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-              BRANCH_NAME="${{ github.event.client_payload.branch }}"
-            else
-              BRANCH_NAME="${{ github.ref_name }}"
-            fi
+            BRANCH_NAME="${{ github.ref_name }}"
             
             # Asegurar que el directorio base existe
             mkdir -p "$BASE_PATH"
             cd "$BASE_PATH"
             
-            # Clonar o actualizar AMEFA.Orchestration
-            if [ -d "$DEPLOY_PATH/.git" ]; then
-              cd "$DEPLOY_PATH"
-              git fetch origin
-              git checkout $BRANCH_NAME || git checkout -b $BRANCH_NAME origin/$BRANCH_NAME
-              git pull origin $BRANCH_NAME || true
-            else
+            # Clonar o actualizar AMEFA.Orchestration si no existe
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
               echo "📦 Clonando AMEFA.Orchestration..."
               rm -rf "$DEPLOY_PATH"
               git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFA.Orchestration.git "$DEPLOY_PATH" || true
-              cd "$DEPLOY_PATH"
-            fi
-            
-            # Actualizar repositorios dependientes
-            cd "$BASE_PATH"
-            
-            # Actualizar AMEFAService.Gateway
-            if [ -d "AMEFAService.Gateway/.git" ]; then
-              cd AMEFAService.Gateway
-              git fetch origin
-              if [ "$BRANCH_NAME" = "main" ]; then
-                GATEWAY_BRANCH="main"
-              elif [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
-                GATEWAY_BRANCH="dev"
-              else
-                GATEWAY_BRANCH="$BRANCH_NAME"
-              fi
-              git checkout $GATEWAY_BRANCH || git checkout -b $GATEWAY_BRANCH origin/$GATEWAY_BRANCH
-              git pull origin $GATEWAY_BRANCH || true
-              cd "$BASE_PATH"
-            else
-              if [ "$BRANCH_NAME" = "main" ]; then
-                GATEWAY_BRANCH="main"
-              elif [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
-                GATEWAY_BRANCH="dev"
-              else
-                GATEWAY_BRANCH="$BRANCH_NAME"
-              fi
-              echo "📦 Clonando AMEFAService.Gateway (branch: $GATEWAY_BRANCH)..."
-              git clone -b $GATEWAY_BRANCH https://github.com/abrsanchezolea/AMEFAService.Gateway.git AMEFAService.Gateway || true
             fi
             
             cd "$DEPLOY_PATH"
             
             # Determinar si usar staging o production
+            # Obtener branch del evento o del payload
+            if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+              BRANCH_NAME="${{ github.event.client_payload.branch }}"
+            else
+              BRANCH_NAME="${{ github.ref_name }}"
+            fi
             if [ "$BRANCH_NAME" = "dev" ] || [ "$BRANCH_NAME" = "develop" ]; then
               COMPOSE_FILES="-f docker-compose.yml -f docker-compose.staging.yml"
               ENV_TYPE="staging"
@@ -188,24 +152,24 @@ jobs:
               echo "🚀 Deploying to Production environment"
             fi
             
-            # Generar archivo .env desde GitHub Secrets (si no existe)
-            if [ ! -f .env ]; then
-              echo "🔧 Generando archivo .env para entorno $ENV_TYPE..."
-              cat > .env << EOF
+            # Generar archivo .env desde GitHub Secrets
+            echo "🔧 Generando archivo .env para entorno $ENV_TYPE..."
+            cat > .env << EOF
             # Archivo .env generado automáticamente desde GitHub Secrets
             # Entorno: $ENV_TYPE
             # Generado: $(date)
             
             # Database Configuration
             EOF
-              if [ "$ENV_TYPE" = "staging" ]; then
-                echo "STAGING_DB_CONNECTION_STRING=${{ secrets.STAGING_DB_CONNECTION_STRING }}" >> .env
-              else
-                echo "DB_SA_PASSWORD=${{ secrets.DB_SA_PASSWORD }}" >> .env
-                echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
-                echo "DB_PORT=${{ secrets.DB_PORT }}" >> .env
-              fi
-              cat >> .env << EOF
+            # Database Configuration según el environment
+            if [ "$ENV_TYPE" = "staging" ]; then
+              echo "STAGING_DB_CONNECTION_STRING=${{ secrets.STAGING_DB_CONNECTION_STRING }}" >> .env
+            else
+              echo "DB_SA_PASSWORD=${{ secrets.DB_SA_PASSWORD }}" >> .env
+              echo "DB_NAME=${{ secrets.DB_NAME }}" >> .env
+              echo "DB_PORT=${{ secrets.DB_PORT || '1433' }}" >> .env
+            fi
+            cat >> .env << EOF
             
             # API Configuration
             API_PORT=8081
@@ -216,21 +180,21 @@ jobs:
             # Web Configuration
             WEB_PORT=3000
             EOF
-              # VITE_API_BASE_URL viene del environment secret
-              echo "VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}" >> .env
-              cat >> .env << EOF
+            # VITE_API_BASE_URL viene del environment secret
+            echo "VITE_API_BASE_URL=${{ secrets.VITE_API_BASE_URL }}" >> .env
+            cat >> .env << EOF
             
             # JWT Configuration
             JWT_KEY=${{ secrets.JWT_KEY }}
             JWT_ISSUER=${{ secrets.JWT_ISSUER }}
             JWT_AUDIENCE=${{ secrets.JWT_AUDIENCE }}
             EOF
-              if [ "$ENV_TYPE" = "staging" ]; then
-                echo "JWT_EXPIRES_IN_MINUTES=${{ secrets.JWT_EXPIRES_IN_MINUTES || '120' }}" >> .env
-              else
-                echo "JWT_EXPIRES_IN_MINUTES=${{ secrets.JWT_EXPIRES_IN_MINUTES || '1440' }}" >> .env
-              fi
-              cat >> .env << EOF
+            if [ "$ENV_TYPE" = "staging" ]; then
+              echo "JWT_EXPIRES_IN_MINUTES=${{ secrets.JWT_EXPIRES_IN_MINUTES || '120' }}" >> .env
+            else
+              echo "JWT_EXPIRES_IN_MINUTES=${{ secrets.JWT_EXPIRES_IN_MINUTES || '1440' }}" >> .env
+            fi
+            cat >> .env << EOF
             
             # Stripe Configuration
             STRIPE_SECRET_KEY=${{ secrets.STRIPE_SECRET_KEY }}
@@ -261,18 +225,18 @@ jobs:
             
             # Cache Configuration
             EOF
-              if [ "$ENV_TYPE" = "staging" ]; then
-                cat >> .env << EOF
+            if [ "$ENV_TYPE" = "staging" ]; then
+              cat >> .env << EOF
             CACHE_PHARMACIES_ABSOLUTE=15
             CACHE_PHARMACIES_SLIDING=5
             EOF
-              else
-                cat >> .env << EOF
+            else
+              cat >> .env << EOF
             CACHE_PHARMACIES_ABSOLUTE=60
             CACHE_PHARMACIES_SLIDING=10
             EOF
-              fi
-              cat >> .env << EOF
+            fi
+            cat >> .env << EOF
             CACHE_PHARMACIES_ENABLED=true
             CACHE_USERS_ABSOLUTE=15
             CACHE_USERS_SLIDING=5
@@ -284,15 +248,14 @@ jobs:
             DOCKER_REGISTRY=docker.io
             IMAGE_TAG=$BRANCH_NAME
             EOF
-              chmod 600 .env
-              echo "✅ Archivo .env generado y protegido"
-            else
-              echo "ℹ️ Archivo .env ya existe, usando configuración existente"
-            fi
+            
+            # Proteger el archivo .env
+            chmod 600 .env
+            echo "✅ Archivo .env generado y protegido"
             
             # Login a Docker Hub en el VPS
             echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
             # Actualizar imagen
-            docker-compose $COMPOSE_FILES pull gateway || true
-            docker-compose $COMPOSE_FILES up -d gateway
-            docker-compose $COMPOSE_FILES logs --tail=50 gateway
+            docker-compose $COMPOSE_FILES pull api || true
+            docker-compose $COMPOSE_FILES up -d api
+            docker-compose $COMPOSE_FILES logs --tail=50 api

@@ -1,5 +1,4 @@
 name: Deploy AMEFAService.Gateway
-# Updated: Configured for dev branch staging deployments
 
 on:
   # Se activa manualmente o cuando hay cambios en este repositorio
@@ -31,8 +30,7 @@ jobs:
 
     # Determinar el environment basado en el branch
     # main → production, dev/develop → staging
-    # Cuando viene de repository_dispatch, usar el branch del payload
-    environment: ${{ github.event_name == 'repository_dispatch' && (github.event.client_payload.branch == 'main' && 'production' || 'staging') || (github.ref_name == 'main' && 'production' || 'staging') }}
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 
     steps:
       - name: Determine branch
@@ -121,63 +119,28 @@ jobs:
           script: |
             DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH || '/opt/amefa/AMEFA.Orchestration' }}"
             BASE_PATH="$(dirname "$DEPLOY_PATH")"
-            
-            # Determinar branch del evento o del payload ANTES de clonar
-            if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-              BRANCH_NAME="${{ github.event.client_payload.branch }}"
-            else
-              BRANCH_NAME="${{ github.ref_name }}"
-            fi
+            BRANCH_NAME="${{ github.ref_name }}"
             
             # Asegurar que el directorio base existe
             mkdir -p "$BASE_PATH"
             cd "$BASE_PATH"
             
-            # Clonar o actualizar AMEFA.Orchestration
-            if [ -d "$DEPLOY_PATH/.git" ]; then
-              cd "$DEPLOY_PATH"
-              git fetch origin
-              git checkout $BRANCH_NAME || git checkout -b $BRANCH_NAME origin/$BRANCH_NAME
-              git pull origin $BRANCH_NAME || true
-            else
+            # Clonar o actualizar AMEFA.Orchestration si no existe
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
               echo "📦 Clonando AMEFA.Orchestration..."
               rm -rf "$DEPLOY_PATH"
               git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFA.Orchestration.git "$DEPLOY_PATH" || true
-              cd "$DEPLOY_PATH"
-            fi
-            
-            # Actualizar repositorios dependientes
-            cd "$BASE_PATH"
-            
-            # Actualizar AMEFAService.Gateway
-            if [ -d "AMEFAService.Gateway/.git" ]; then
-              cd AMEFAService.Gateway
-              git fetch origin
-              if [ "$BRANCH_NAME" = "main" ]; then
-                GATEWAY_BRANCH="main"
-              elif [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
-                GATEWAY_BRANCH="dev"
-              else
-                GATEWAY_BRANCH="$BRANCH_NAME"
-              fi
-              git checkout $GATEWAY_BRANCH || git checkout -b $GATEWAY_BRANCH origin/$GATEWAY_BRANCH
-              git pull origin $GATEWAY_BRANCH || true
-              cd "$BASE_PATH"
-            else
-              if [ "$BRANCH_NAME" = "main" ]; then
-                GATEWAY_BRANCH="main"
-              elif [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
-                GATEWAY_BRANCH="dev"
-              else
-                GATEWAY_BRANCH="$BRANCH_NAME"
-              fi
-              echo "📦 Clonando AMEFAService.Gateway (branch: $GATEWAY_BRANCH)..."
-              git clone -b $GATEWAY_BRANCH https://github.com/abrsanchezolea/AMEFAService.Gateway.git AMEFAService.Gateway || true
             fi
             
             cd "$DEPLOY_PATH"
             
             # Determinar si usar staging o production
+            # Obtener branch del evento o del payload
+            if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+              BRANCH_NAME="${{ github.event.client_payload.branch }}"
+            else
+              BRANCH_NAME="${{ github.ref_name }}"
+            fi
             if [ "$BRANCH_NAME" = "dev" ] || [ "$BRANCH_NAME" = "develop" ]; then
               COMPOSE_FILES="-f docker-compose.yml -f docker-compose.staging.yml"
               ENV_TYPE="staging"

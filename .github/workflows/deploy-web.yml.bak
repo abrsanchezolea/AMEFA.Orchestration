@@ -1,5 +1,4 @@
-name: Deploy AMEFAService.Gateway
-# Updated: Configured for dev branch staging deployments
+name: Deploy AMEFA.Web
 
 on:
   # Se activa manualmente o cuando hay cambios en este repositorio
@@ -9,18 +8,19 @@ on:
       - develop
       - dev
     paths:
-      - '.github/workflows/deploy-gateway.yml'
+      - '.github/workflows/deploy-web.yml'
       - 'docker-compose.yml'
       - 'docker-compose.staging.yml'
   # Se puede activar desde otros repositorios usando repository_dispatch
   repository_dispatch:
-    types: [deploy-gateway]
+    types: [deploy-web]
   # Activación manual
   workflow_dispatch:
 
 env:
-  IMAGE_NAME: amefa-gateway
+  IMAGE_NAME: amefa-web
   REGISTRY: docker.io
+  # Usa tu usuario de Docker Hub o ghcr.io para GitHub Container Registry
 
 jobs:
   build-and-push:
@@ -31,8 +31,7 @@ jobs:
 
     # Determinar el environment basado en el branch
     # main → production, dev/develop → staging
-    # Cuando viene de repository_dispatch, usar el branch del payload
-    environment: ${{ github.event_name == 'repository_dispatch' && (github.event.client_payload.branch == 'main' && 'production' || 'staging') || (github.ref_name == 'main' && 'production' || 'staging') }}
+    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 
     steps:
       - name: Determine branch
@@ -43,43 +42,26 @@ jobs:
           else
             BRANCH="${{ github.ref_name }}"
           fi
-          # Mapear ramas: main -> main, develop/dev -> dev
-          # Gateway tiene Dockerfile en ambas ramas, pero mapeamos para consistencia
+          # Mapear ramas según la rama de AMEFA.Orchestration:
+          # main -> main (production), dev/develop -> dev (staging)
           if [ "$BRANCH" = "main" ]; then
-            GATEWAY_BRANCH="main"
+            WEB_BRANCH="main"
           elif [ "$BRANCH" = "develop" ] || [ "$BRANCH" = "dev" ]; then
-            GATEWAY_BRANCH="dev"
+            WEB_BRANCH="dev"
           else
-            GATEWAY_BRANCH="$BRANCH"
+            WEB_BRANCH="$BRANCH"
           fi
           echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
-          echo "gateway_branch=${GATEWAY_BRANCH}" >> $GITHUB_OUTPUT
-          echo "✅ Using branch: ${BRANCH} -> AMEFAService.Gateway branch: ${GATEWAY_BRANCH}"
+          echo "web_branch=${WEB_BRANCH}" >> $GITHUB_OUTPUT
+          echo "✅ Using branch: ${BRANCH} -> AMEFA.Web branch: ${WEB_BRANCH}"
       
-      - name: Checkout AMEFAService.Gateway
+      - name: Checkout AMEFA.Web
         uses: actions/checkout@v4
         with:
-          repository: abrsanchezolea/AMEFAService.Gateway
-          ref: ${{ steps.branch.outputs.gateway_branch }}
-          path: AMEFAService.Gateway
+          repository: abrsanchezolea/AMEFA.Web
+          ref: ${{ steps.branch.outputs.web_branch }}
+          path: AMEFA.Web
           token: ${{ secrets.REPO_ACCESS_TOKEN }}
-
-      - name: Verify Dockerfile exists
-        run: |
-          echo "📁 Current directory: $(pwd)"
-          echo "📁 Contents of AMEFAService.Gateway:"
-          ls -la ./AMEFAService.Gateway/ || echo "❌ AMEFAService.Gateway directory not found"
-          echo ""
-          echo "🔍 Looking for Dockerfile:"
-          if [ -f "./AMEFAService.Gateway/Dockerfile" ]; then
-            echo "✅ Dockerfile found at ./AMEFAService.Gateway/Dockerfile"
-            head -5 ./AMEFAService.Gateway/Dockerfile
-          else
-            echo "❌ Dockerfile NOT found at ./AMEFAService.Gateway/Dockerfile"
-            echo "📋 Files in AMEFAService.Gateway:"
-            find ./AMEFAService.Gateway -name "Dockerfile*" -o -name "dockerfile*" || echo "No Dockerfile found"
-            exit 1
-          fi
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -100,14 +82,62 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
+      - name: Determine NODE_ENV
+        id: node_env
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            BRANCH="${{ github.event.client_payload.branch }}"
+          else
+            BRANCH="${{ github.ref_name }}"
+          fi
+          if [ "$BRANCH" = "dev" ] || [ "$BRANCH" = "develop" ]; then
+            echo "NODE_ENV=staging" >> $GITHUB_OUTPUT
+            echo "✅ Using NODE_ENV=staging for branch $BRANCH"
+          else
+            echo "NODE_ENV=production" >> $GITHUB_OUTPUT
+            echo "✅ Using NODE_ENV=production for branch $BRANCH"
+          fi
+
+      - name: Determine VITE_API_BASE_URL
+        id: api_url
+        run: |
+          # VITE_API_BASE_URL viene del environment secret (staging o production)
+          API_URL="${{ secrets.VITE_API_BASE_URL }}"
+          echo "VITE_API_BASE_URL=${API_URL}" >> $GITHUB_OUTPUT
+          echo "✅ Using VITE_API_BASE_URL from environment secret"
+          if [ -z "${API_URL}" ]; then
+            echo "❌ ERROR: VITE_API_BASE_URL secret is not configured for this environment"
+            exit 1
+          fi
+
+      - name: Verify Dockerfile exists
+        run: |
+          echo "📁 Current directory: $(pwd)"
+          echo "📁 Contents of AMEFA.Web:"
+          ls -la ./AMEFA.Web/ || echo "❌ AMEFA.Web directory not found"
+          echo ""
+          echo "🔍 Looking for Dockerfile:"
+          if [ -f "./AMEFA.Web/Dockerfile" ]; then
+            echo "✅ Dockerfile found at ./AMEFA.Web/Dockerfile"
+            head -5 ./AMEFA.Web/Dockerfile
+          else
+            echo "❌ Dockerfile NOT found at ./AMEFA.Web/Dockerfile"
+            echo "📋 Files in AMEFA.Web:"
+            find ./AMEFA.Web -name "Dockerfile*" -o -name "dockerfile*" || echo "No Dockerfile found"
+            exit 1
+          fi
+
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
-          context: ./AMEFAService.Gateway
-          file: ./AMEFAService.Gateway/Dockerfile
+          context: ./AMEFA.Web
+          file: ./AMEFA.Web/Dockerfile          
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VITE_API_BASE_URL=${{ steps.api_url.outputs.VITE_API_BASE_URL }}
+            NODE_ENV=${{ steps.node_env.outputs.NODE_ENV }}
           cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:buildcache
           cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
 
@@ -121,63 +151,28 @@ jobs:
           script: |
             DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH || '/opt/amefa/AMEFA.Orchestration' }}"
             BASE_PATH="$(dirname "$DEPLOY_PATH")"
-            
-            # Determinar branch del evento o del payload ANTES de clonar
-            if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-              BRANCH_NAME="${{ github.event.client_payload.branch }}"
-            else
-              BRANCH_NAME="${{ github.ref_name }}"
-            fi
+            BRANCH_NAME="${{ github.ref_name }}"
             
             # Asegurar que el directorio base existe
             mkdir -p "$BASE_PATH"
             cd "$BASE_PATH"
             
-            # Clonar o actualizar AMEFA.Orchestration
-            if [ -d "$DEPLOY_PATH/.git" ]; then
-              cd "$DEPLOY_PATH"
-              git fetch origin
-              git checkout $BRANCH_NAME || git checkout -b $BRANCH_NAME origin/$BRANCH_NAME
-              git pull origin $BRANCH_NAME || true
-            else
+            # Clonar o actualizar AMEFA.Orchestration si no existe
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
               echo "📦 Clonando AMEFA.Orchestration..."
               rm -rf "$DEPLOY_PATH"
               git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFA.Orchestration.git "$DEPLOY_PATH" || true
-              cd "$DEPLOY_PATH"
-            fi
-            
-            # Actualizar repositorios dependientes
-            cd "$BASE_PATH"
-            
-            # Actualizar AMEFAService.Gateway
-            if [ -d "AMEFAService.Gateway/.git" ]; then
-              cd AMEFAService.Gateway
-              git fetch origin
-              if [ "$BRANCH_NAME" = "main" ]; then
-                GATEWAY_BRANCH="main"
-              elif [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
-                GATEWAY_BRANCH="dev"
-              else
-                GATEWAY_BRANCH="$BRANCH_NAME"
-              fi
-              git checkout $GATEWAY_BRANCH || git checkout -b $GATEWAY_BRANCH origin/$GATEWAY_BRANCH
-              git pull origin $GATEWAY_BRANCH || true
-              cd "$BASE_PATH"
-            else
-              if [ "$BRANCH_NAME" = "main" ]; then
-                GATEWAY_BRANCH="main"
-              elif [ "$BRANCH_NAME" = "develop" ] || [ "$BRANCH_NAME" = "dev" ]; then
-                GATEWAY_BRANCH="dev"
-              else
-                GATEWAY_BRANCH="$BRANCH_NAME"
-              fi
-              echo "📦 Clonando AMEFAService.Gateway (branch: $GATEWAY_BRANCH)..."
-              git clone -b $GATEWAY_BRANCH https://github.com/abrsanchezolea/AMEFAService.Gateway.git AMEFAService.Gateway || true
             fi
             
             cd "$DEPLOY_PATH"
             
             # Determinar si usar staging o production
+            # Obtener branch del evento o del payload
+            if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+              BRANCH_NAME="${{ github.event.client_payload.branch }}"
+            else
+              BRANCH_NAME="${{ github.ref_name }}"
+            fi
             if [ "$BRANCH_NAME" = "dev" ] || [ "$BRANCH_NAME" = "develop" ]; then
               COMPOSE_FILES="-f docker-compose.yml -f docker-compose.staging.yml"
               ENV_TYPE="staging"
@@ -293,6 +288,6 @@ jobs:
             # Login a Docker Hub en el VPS
             echo "${{ secrets.DOCKER_PASSWORD }}" | docker login -u "${{ secrets.DOCKER_USERNAME }}" --password-stdin
             # Actualizar imagen
-            docker-compose $COMPOSE_FILES pull gateway || true
-            docker-compose $COMPOSE_FILES up -d gateway
-            docker-compose $COMPOSE_FILES logs --tail=50 gateway
+            docker-compose $COMPOSE_FILES pull web || true
+            docker-compose $COMPOSE_FILES up -d web
+            docker-compose $COMPOSE_FILES logs --tail=50 web
