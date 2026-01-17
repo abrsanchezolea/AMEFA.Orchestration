@@ -1,12 +1,19 @@
 name: Deploy AMEFAService.Gateway
 
 on:
+  # Se activa manualmente o cuando hay cambios en este repositorio
   push:
     branches:
       - main
       - develop
     paths:
-      - '../AMEFAService.Gateway/**'
+      - '.github/workflows/deploy-gateway.yml'
+      - 'docker-compose.yml'
+      - 'docker-compose.staging.yml'
+  # Se puede activar desde otros repositorios usando repository_dispatch
+  repository_dispatch:
+    types: [deploy-gateway]
+  # Activación manual
   workflow_dispatch:
 
 env:
@@ -21,14 +28,25 @@ jobs:
       packages: write
 
     # Determinar el environment basado en el branch
-    environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
+    environment: ${{ github.event_name == 'repository_dispatch' && 'staging' || (github.ref_name == 'main' && 'production' || 'staging') }}
 
     steps:
+      - name: Determine branch
+        id: branch
+        run: |
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            BRANCH="${{ github.event.client_payload.branch }}"
+          else
+            BRANCH="${{ github.ref_name }}"
+          fi
+          echo "branch=${BRANCH}" >> $GITHUB_OUTPUT
+          echo "✅ Using branch: ${BRANCH}"
+      
       - name: Checkout AMEFAService.Gateway
         uses: actions/checkout@v4
         with:
           repository: abrsanchezolea/AMEFAService.Gateway
-          ref: ${{ github.ref_name }}
+          ref: ${{ steps.branch.outputs.branch }}
           path: AMEFAService.Gateway
 
       - name: Set up Docker Buildx
@@ -87,7 +105,12 @@ jobs:
             cd "$DEPLOY_PATH"
             
             # Determinar si usar staging o production
-            BRANCH_NAME="${{ github.ref_name }}"
+            # Obtener branch del evento o del payload
+            if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+              BRANCH_NAME="${{ github.event.client_payload.branch }}"
+            else
+              BRANCH_NAME="${{ github.ref_name }}"
+            fi
             if [ "$BRANCH_NAME" = "dev" ] || [ "$BRANCH_NAME" = "develop" ]; then
               COMPOSE_FILES="-f docker-compose.yml -f docker-compose.staging.yml"
               ENV_TYPE="staging"
@@ -192,7 +215,7 @@ jobs:
             # Docker Registry Configuration
             DOCKER_USERNAME=${{ secrets.DOCKER_USERNAME }}
             DOCKER_REGISTRY=docker.io
-            IMAGE_TAG=${{ github.ref_name }}
+            IMAGE_TAG=$BRANCH_NAME
             EOF
               chmod 600 .env
               echo "✅ Archivo .env generado y protegido"
