@@ -27,8 +27,12 @@ jobs:
     environment: ${{ github.ref_name == 'main' && 'production' || 'staging' }}
 
     steps:
-      - name: Checkout code
+      - name: Checkout AMEFAService.API
         uses: actions/checkout@v4
+        with:
+          repository: abrsanchezolea/AMEFAService.API
+          ref: ${{ github.ref_name }}
+          path: AMEFAService.API
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -68,7 +72,22 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           passphrase: ${{ secrets.VPS_SSH_PASSPHRASE }}
           script: |
-            cd ${{ secrets.VPS_DEPLOY_PATH || '/opt/amefa/AMEFA.Orchestration' }}
+            DEPLOY_PATH="${{ secrets.VPS_DEPLOY_PATH || '/opt/amefa/AMEFA.Orchestration' }}"
+            BASE_PATH="$(dirname "$DEPLOY_PATH")"
+            BRANCH_NAME="${{ github.ref_name }}"
+            
+            # Asegurar que el directorio base existe
+            mkdir -p "$BASE_PATH"
+            cd "$BASE_PATH"
+            
+            # Clonar o actualizar AMEFA.Orchestration si no existe
+            if [ ! -d "$DEPLOY_PATH/.git" ]; then
+              echo "📦 Clonando AMEFA.Orchestration..."
+              rm -rf "$DEPLOY_PATH"
+              git clone -b $BRANCH_NAME https://github.com/abrsanchezolea/AMEFA.Orchestration.git "$DEPLOY_PATH" || true
+            fi
+            
+            cd "$DEPLOY_PATH"
             
             # Determinar si usar staging o production
             BRANCH_NAME="${{ github.ref_name }}"
