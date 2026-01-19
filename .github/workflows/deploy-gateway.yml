@@ -1,5 +1,6 @@
 name: Deploy AMEFAService.Gateway
 # Updated: Configured for dev branch staging deployments
+# Redeploy: Force Gateway deployment with CORS fix
 
 on:
   # Se activa manualmente o cuando hay cambios en este repositorio
