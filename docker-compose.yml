@@ -56,8 +56,10 @@ services:
       - SuperAdmin__Email=${SUPERADMIN_EMAIL:-admin@amefa.com}
       - SuperAdmin__Password=${SUPERADMIN_PASSWORD}
       - SuperAdmin__FullName=${SUPERADMIN_FULLNAME:-Super Administrator}
-    ports:
-      - "${API_PORT:-8081}:8080"
+    # API port is NOT exposed publicly - only accessible internally via Docker network
+    # Gateway accesses API using service name "api" on port 8080
+    # ports:
+    #   - "${API_PORT:-8081}:8080"
     depends_on:
       sqlserver:
         condition: service_healthy
