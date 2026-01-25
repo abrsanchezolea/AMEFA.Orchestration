@@ -73,12 +73,9 @@ services:
   web:
     build:
       args:
-        # ⚠️ VITE_API_BASE_URL es REQUERIDO - debe estar configurado en el archivo .env.staging
+        # ⚠️ VITE_API_BASE_URL es REQUERIDO - debe apuntar al Gateway (puerto 8080)
+        # Todas las llamadas, incluyendo imágenes, deben pasar por el Gateway
         - VITE_API_BASE_URL=${VITE_API_BASE_URL}
-        # VITE_API_IMAGE_URL es OPCIONAL - URL directa del API para imágenes (si es diferente del Gateway)
-        - VITE_API_IMAGE_URL=${VITE_API_IMAGE_URL:-}
-        # VITE_API_IMAGE_PORT es OPCIONAL - Puerto del API para imágenes (por defecto: 8081)
-        - VITE_API_IMAGE_PORT=${VITE_API_IMAGE_PORT:-8081}
         # NODE_ENV debe ser 'staging' para staging
         - NODE_ENV=staging
     environment:
